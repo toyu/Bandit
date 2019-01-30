@@ -78,10 +78,10 @@ step_num = 100000
 k = 20
 agent_num = 1
 environment_type = "unsteady"
-change_type = "constant"
+change_type = "constan"
 labels = ["meta_UCB1T"]
 # labels = ["500", "750", "1000", "1250", "1500"]
-graph_titles = ["accuracy2", "regret2", "replacement_rate2"]
+graph_titles = ["accuracy3", "regret3", "replacement_rate3"]
 
 start = time()
 
