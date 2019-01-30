@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class Environment(object):
+class Bandit(object):
     def __init__(self, k):
         while True:
             self.probability = np.asarray(np.random.rand(k))
