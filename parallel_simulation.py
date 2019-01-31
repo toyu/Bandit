@@ -71,7 +71,7 @@ def plot_graph(data, agent_num, data_type_num, step_num, job_num):
         # plt.show()
 
 
-simulation_num = 1000
+simulation_num = 100
 job_num = 10
 simulation_num_per_job = int(simulation_num / job_num)
 step_num = 100000
@@ -81,7 +81,7 @@ environment_type = "unsteady"
 change_type = "constan"
 labels = ["meta_UCB1T"]
 # labels = ["500", "750", "1000", "1250", "1500"]
-graph_titles = ["accuracy3", "regret3", "replacement_rate3"]
+graph_titles = ["accuracy0", "regret0", "replacement_rate0"]
 
 start = time()
 
