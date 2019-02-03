@@ -65,6 +65,58 @@ class RS_OPT(Agent):
         self.arm_values[selected] = self.arm_counts[selected] * (average - self.r)
 
 
+class RS(Agent):
+    def __init__(self, k, alpha=0.0005):
+        super().__init__(k)
+        self.r = 1
+        self.alpha = alpha
+        self.reward_sum = 0
+        self.count = 0
+
+    def reset_params(self):
+        super().recet_params()
+
+    def select_arm(self):
+        return greedy(self.arm_values)
+
+    def update(self, selected, reward):
+        self.reward_sum += reward
+        self.count += 1
+        self.arm_counts[selected] += 1
+        self.arm_rewards[selected] += reward
+        average = self.arm_rewards[selected] / self.arm_counts[selected]
+        self.arm_values[selected] = self.arm_counts[selected] * (average - self.r)
+        self.r += self.alpha * (average - self.r)
+
+class RS_gamma(Agent):
+    def __init__(self, k, alpha=0.0005, gamma=0.999):
+        super().__init__(k)
+        self.r = 1.0
+        self.alpha = alpha
+        self.reward_sum = 0
+        self.count = 0
+        self.gamma = gamma
+        self.E = np.zeros(k)
+        self.arm_w_counts = np.zeros(k) + 0.0001
+        self.arm_l_counts = np.zeros(k) + 0.0001
+
+    def reset_params(self):
+        super().recet_params()
+
+    def select_arm(self):
+        self.E = self.arm_w_counts / (self.arm_w_counts + self.arm_l_counts)
+        self.arm_values = (self.arm_w_counts + self.arm_l_counts) * (self.E - self.r)
+        return greedy(self.arm_values)
+
+    def update(self, selected, reward):
+        self.arm_w_counts *= self.gamma
+        self.arm_l_counts *= self.gamma
+        self.arm_w_counts[selected] += reward
+        self.arm_l_counts[selected] += 1 - reward
+        self.r += self.alpha * (self.E[selected] - self.r)
+
+
+
 class RS_CH(Agent):
     def __init__(self, k):
         self.arm_num = k
@@ -231,7 +283,7 @@ class UCB1T(Agent):
         super().recet_params()
 
     def select_arm(self):
-        if np.amin(self.arm_counts) == 0:
+        if self.f == 0 and np.amin(self.arm_counts) == 0:
             return np.argmin(self.arm_counts)
         else:
             self.f = 1
@@ -268,13 +320,13 @@ class meta_UCB1T(Agent):
         self.selected = 0
         self.k = k
         self.mT_sum = 0
-        self.mT_sum_array = np.array([])
+        self.MT = 0
 
     def reset_params(self):
         self.meta_flag = 0
         self.l_count = 0
         self.mT_sum = 0
-        self.mT_sum_array = np.zeros([])
+        self.MT = 0
 
     def select_arm(self):
         if self.meta_flag:
@@ -309,105 +361,163 @@ class meta_UCB1T(Agent):
             rt_mean = self.old_agent.reward_sum / self.old_agent.count
             mT = reward - rt_mean + self.delta
             self.mT_sum += mT
-            self.mT_sum_array = np.append(self.mT_sum_array, self.mT_sum)
-            MT = np.amax(self.mT_sum_array)
-            PHT = MT - self.mT_sum
+            if self.mT_sum > self.MT:
+                self.MT = self.mT_sum
+            PHT = self.MT - self.mT_sum
 
-            if PHT > self.lmd and self.step > 500:
+            if PHT > self.lmd:
             # if self.step % 10000 == 0:
             #     print(self.step)
                 self.meta_flag = 1
                 self.new_agent = UCB1T(self.k)
                 self.higher_agent = UCB1T(2)
 
-# class meta_UCB1T(Agent):
-#     def __init__(self, k, l=500, delta=0.1, lmd=30):
+
+class meta_RS(Agent):
+    def __init__(self, k, l=30, lmd=25, delta=0.001):
+        super().__init__(k)
+        self.old_agent = RS(k)
+        self.new_agent = None
+        self.higher_agent = None
+        self.meta_flag = 0
+        self.l = l
+        self.l_count = 0
+        self.delta = delta
+        self.lmd = lmd
+        self.step = 0
+        self.selected = 0
+        self.k = k
+        self.mT_sum = 0
+        self.MT = 0
+
+    def reset_params(self):
+        self.meta_flag = 0
+        self.l_count = 0
+        self.mT_sum = 0
+        self.MT = 0
+
+    def select_arm(self):
+        if self.meta_flag:
+            self.selected = self.higher_agent.select_arm()
+
+            if self.selected == 0:
+                return self.old_agent.select_arm()
+            else:
+                return self.new_agent.select_arm()
+        else:
+            return self.old_agent.select_arm()
+
+    def update(self, selected, reward):
+        self.step += 1
+        self.old_agent.update(selected, reward)
+
+        if self.meta_flag:
+            self.l_count += 1
+            self.higher_agent.update(self.selected, reward)
+            self.new_agent.update(selected, reward)
+
+            if self.l_count == self.l:
+                self.reset_params()
+
+                if greedy(self.higher_agent.arm_rewards) == 1:
+                    self.old_agent = self.new_agent
+
+        else:
+            # max_arm = greedy(self.old_agent.arm_rewards)
+            # rt_mean =  self.old_agent.arm_rewards[max_arm] /  self.old_agent.arm_counts[max_arm]
+            rt_mean = self.old_agent.reward_sum / self.old_agent.count
+            mT = reward - rt_mean + self.delta
+            self.mT_sum += mT
+            if self.mT_sum > self.MT:
+                self.MT = self.mT_sum
+            PHT = self.MT - self.mT_sum
+
+            if PHT > self.lmd:
+            # if self.step % 10000 == 0:
+            #     print(self.step)
+                self.meta_flag = 1
+                self.new_agent = RS(self.k)
+                self.higher_agent = RS(2)
+
+
+# class meta_RS(Agent):
+#     def __init__(self, k, l=100, delta=0, lmd=30):
 #         super().__init__(k)
-#         self.old_agent = UCB1T(k)
+#         self.old_agent = RS(k)
 #         self.new_agent = None
+#         self.higher_agent = None
 #         self.meta_flag = 0
 #         self.l = l
 #         self.l_count = 0
 #         self.delta = delta
 #         self.lmd = lmd
-#         self.reward_sum = 0
 #         self.step = 0
-#         self.arm_counts = np.zeros(2)
-#         self.arm_rewards = np.zeros(2)
-#         self.arm_values = np.zeros(2)
-#         self.arm_rewards_square = np.zeros(2)
 #         self.selected = 0
 #         self.k = k
-#         self.count = 0
 #         self.mT_sum = 0
-#         self.mT_sum_array = np.array([])
+#         self.MT = 0
+#         self.new_mT_sum = 0
+#         self.new_MT = 0
 #
 #     def reset_params(self):
 #         self.meta_flag = 0
 #         self.l_count = 0
-#         self.count = 0
-#         self.arm_counts = np.zeros(2)
-#         self.arm_rewards = np.zeros(2)
-#         self.arm_values = np.zeros(2)
-#         self.arm_rewards_square = np.zeros(2)
 #         self.mT_sum = 0
-#         self.mT_sum_array = np.zeros([])
+#         self.MT = 0
+#         self.new_mT_sum = 0
+#         self.new_MT = 0
 #
 #     def select_arm(self):
 #         if self.meta_flag:
-#             if self.l_count <= 1:
-#                 self.selected = self.l_count
-#             else:
-#                 self.selected = greedy(self.arm_values)
+#             self.selected = self.higher_agent.select_arm()
 #
 #             if self.selected == 0:
 #                 return self.old_agent.select_arm()
 #             else:
 #                 return self.new_agent.select_arm()
 #         else:
+#             self.selected = 0
 #             return self.old_agent.select_arm()
 #
 #     def update(self, selected, reward):
-#         self.reward_sum += reward
 #         self.step += 1
+#         self.old_agent.update(selected, reward)
+#
+#         if self.selected == 0:
+#             # max_arm = greedy(self.old_agent.arm_rewards)
+#             # rt_mean =  self.old_agent.arm_rewards[max_arm] /  self.old_agent.arm_counts[max_arm]
+#             rt_mean = self.old_agent.reward_sum / self.old_agent.count
+#             mT = reward - rt_mean + self.delta
+#             self.mT_sum += mT
+#             if self.mT_sum > self.MT:
+#                 self.MT = self.mT_sum
+#         else:
+#             self.new_agent.update(selected, reward)
+#             rt_mean = self.new_agent.reward_sum / self.new_agent.count
+#             mT = reward - rt_mean + self.delta
+#             self.new_mT_sum += mT
+#             if self.new_mT_sum > self.new_MT:
+#                 self.new_MT = self.new_mT_sum
 #
 #         if self.meta_flag:
+#             if self.selected == 0:
+#                 self.new_agent.update(selected, reward)
 #             self.l_count += 1
-#             self.count += 1
-#             self.arm_counts[self.selected] += 1
-#             self.arm_rewards[self.selected] += reward
-#             self.arm_rewards_square[self.selected] += reward * reward
-#
-#             if self.l_count >= 2:
-#                 for i in range(0, 2):
-#                     ave = self.arm_rewards[i] / self.arm_counts[i]
-#                     variance = self.arm_rewards_square[i] / self.arm_counts[i] - ave * ave
-#                     v = variance + math.sqrt((2.0 * math.log(self.count)) / self.arm_counts[i])
-#                     self.arm_values[i] = ave + math.sqrt((math.log(self.count) / self.arm_counts[i]) * min(0.25, v))
-#
+#             self.higher_agent.update(self.selected, reward)
 #             self.old_agent.update(selected, reward)
-#             self.new_agent.update(selected, reward)
+#
 #
 #             if self.l_count == self.l:
 #                 self.reset_params()
 #
-#                 if greedy(self.arm_rewards) == 1:
+#                 if greedy(self.higher_agent.arm_rewards) == 1:
 #                     self.old_agent = self.new_agent
 #
 #         else:
-#             self.old_agent.update(selected, reward)
-#             # max_arm = greedy(self.old_agent.arm_rewards)
-#             # rt_mean =  self.old_agent.arm_rewards[max_arm] /  self.old_agent.arm_counts[max_arm]
-#             rt_mean = self.old_agent.reward_sum / self.old_agent.count
-#             mT = reward - rt_mean
-#             self.mT_sum += mT
-#             self.mT_sum_array = np.append(self.mT_sum_array, self.mT_sum)
-#             MT = np.amax(self.mT_sum_array)
-#             PHT = MT - self.mT_sum
-#
-#             if PHT > self.lmd and self.step > 500:
+#             PHT = self.MT - self.mT_sum
+#             if PHT > self.lmd:
 #             # if self.step % 10000 == 0:
-#                 print(self.step)
+#             #     print(self.step)
 #                 self.meta_flag = 1
-#                 self.new_agent = UCB1T(self.k)
-
+#                 self.new_agent = RS(self.k)
+#                 self.higher_agent = RS(2)

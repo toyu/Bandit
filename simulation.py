@@ -4,21 +4,27 @@ import environment as en
 import agent as ag
 
 
-def simulation_steady_state(simulation_num, step_num, k):
-    labels = ["UCB1T", "Thompson Sampling", "RS-OPT"]
-    labels = ["UCB1T"]
-    accuracy = np.zeros((len(labels), step_num))
-    regrets = np.zeros((len(labels), step_num))
-    replacements = np.zeros((len(labels), step_num))
+def simulation(simulation_num, step_num, k, agent_num, is_unsteady, is_constant):
+    labels = ["meta_UCB1T"]
+    accuracy = np.zeros((agent_num, step_num))
+    regrets = np.zeros((agent_num, step_num))
+    replacements = np.zeros((agent_num, step_num))
     for sim in range(simulation_num):
         print(sim + 1)
         bandit = en.Bandit(k)
-        # agent_list = [ag.UCB1T(k), ag.TS(k), ag.RS_OPT(bandit, k)]
-        agent_list = [ag.UCB1T(k)]
+        agent_list = [ag.meta_RS(k)]
         for i, agent in enumerate(agent_list):
             prev_selected = 0
             regret = 0
             for step in range(step_num):
+                # バンディット変化
+                if is_unsteady:
+                    if is_constant:
+                        if step % 10000 == 0:
+                            bandit = en.Bandit(k)
+                    else:
+                        if np.random.rand() < 0.0001:
+                            bandit = en.Bandit(k)
                 # 腕の選択
                 selected = agent.select_arm()
                 if selected == prev_selected:
@@ -74,9 +80,7 @@ def simulation_steady_state(simulation_num, step_num, k):
     plt.cla()
 
 
-simulation_steady_state(100, 20000, 20)
-# simulation_unsteady_state(10, 1000000, 20)
-
+simulation(300, 100000, 20, 1, 1, 1)
 
 from joblib import Parallel, delayed
 from time import time
