@@ -6,35 +6,54 @@ from joblib import Parallel, delayed
 from time import time
 
 
-def simulation_parallel(simulation_num, step_num, k, agent_num, is_unsteady, is_constant):
+def simulation_parallel(simulation_num, step_num, k, agent_num, is_nonsteady, is_constant):
     accuracy = np.zeros((agent_num, step_num))
     regrets = np.zeros((agent_num, step_num))
     replacements = np.zeros((agent_num, step_num))
     for sim in range(simulation_num):
         print(sim + 1)
         bandit = en.Bandit(k)
-        agent_list = [ag.UCB1T(k), ag.RS(k), ag.meta_UCB1T(k), ag.meta_RS(k), ag.RS_gamma(k)]
-        # agent_list = [ag.meta_RS(k, lmd=25, delta=0), ag.meta_RS(k, lmd=30, delta=0)]
-        # agent_list = [ag.meta_RS(k)]
-        for i, agent in enumerate(agent_list):
+        # agent_list = [ag.UCB1T(k), ag.RS(k), ag.meta_UCB1T(k), ag.meta_RS(k), ag.RS_gamma(k)]
+        agent_list = [ag.UCB1T(k),
+                      ag.RS(k),
+                      ag.RS_OPT(k),
+                      ag.RS_gamma(k),
+                      ag.RS_OPT_gamma(k),
+                      ag.meta_bandit(k, agent=ag.UCB1T(k), higher_agent=ag.UCB1T(2), l=500, delta=0, lmd=30),
+                      ag.meta_bandit(k, agent=ag.RS(k), higher_agent=ag.RS(2), l=30, delta=0, lmd=30),
+                      ag.meta_bandit(k, agent=ag.RS_OPT(k), higher_agent=ag.RS_OPT(2), l=25, delta=0, lmd=30)]
+
+        for agent in agent_list:
+            agent.opt_r = bandit.opt_r
+        regret_sums = np.zeros(agent_num)
+        # prev_selecteds = np.zeros(agent_num)
+
+        for step in range(step_num):
             prev_selected = 0
             regret = 0
-            for step in range(step_num):
-                # バンディット変化
-                if is_unsteady:
-                    if is_constant:
-                        if step % 10000 == 0:
-                            bandit = en.Bandit(k)
-                    else:
-                        if np.random.rand() < 0.0001:
-                            bandit = en.Bandit(k)
+
+            # バンディット変化
+            if is_nonsteady:
+                if is_constant:
+                    if step % 10000 == 0:
+                        bandit = en.Bandit(k)
+                        for agent in agent_list:
+                            agent.opt_r = bandit.opt_r
+                else:
+                    if np.random.rand() < 0.0001:
+                        bandit = en.Bandit(k)
+                        for agent in agent_list:
+                            agent.opt_r = bandit.opt_r
+
+            for i, agent in enumerate(agent_list):
                 # 腕の選択
                 selected = agent.select_arm()
-                if selected == prev_selected:
-                    replacement = 0
-                else:
-                    replacement = 1
-                prev_selected = selected
+                # 前と同じ行動か?
+                # if selected == int(prev_selected[i]):
+                #     replacement = 0
+                # else:
+                #     replacement = 1
+                #     prev_selecteds[i] = selected
                 # 報酬の観測
                 reward = bandit.get_reward(int(selected))
                 # 価値の更新
@@ -42,10 +61,10 @@ def simulation_parallel(simulation_num, step_num, k, agent_num, is_unsteady, is_
                 # accuracy
                 accuracy[i][step] += bandit.get_correct(selected)
                 # regret
-                regret += bandit.get_regret(selected)
-                regrets[i][step] += regret
+                regret_sums[i] += bandit.get_regret(selected)
+                regrets[i][step] += regret_sums[i]
                 # replacement
-                replacements[i][step] += replacement
+                # replacements[i][step] += replacement
 
     return np.array([accuracy, regrets])
 
@@ -70,7 +89,7 @@ def plot_graph(data, agent_num, data_type_num, step_num, job_num):
             file_data = np.concatenate([file_data, graphs], 0)
 
         plt.xlabel('step')
-        plt.ylabel(graph_titles[i])
+        plt.ylabel(y_label[i])
         # plt.ylim([0.0, 1.1])
         # plt.xscale("log")
         for l in range(len(graphs)):
@@ -80,24 +99,30 @@ def plot_graph(data, agent_num, data_type_num, step_num, job_num):
         plt.clf()
         # plt.show()
 
-    np.savetxt(file_name, file_data.transpose(), delimiter=",", header="UCB1T_accuracy,RS_accuracy,meta_UCB1T_accuracy,meta_RS_accuracy,RS_γ_accuracy,UCB1T_regret,RS_regret,meta_UCB1T_regret,meta_RS_regret,RS_γ_regret")
+    header = "UCB1T_accuracy,RS_accuracymeta_UCB1T_accuracy,meta_RS_accuracy,RS_γ_accuracy,UCB1T_regret,RS_regret,meta_UCB1T_regret,meta_RS_regret,RS_γ_regret"
+    accuracy_header = "UCB1T accuracy,RS accuracy,RS OPT accuracy,RS gamma accuracy,RS OPT gamma accuracy,meta UCB1T accuracy,meta RS accuracy,meta RS OPT accuracy"
+    regret_header = ",UCB1T regret,RS regret,RS OPT regret,RS gamma regret,RS OPT gamma regret,meta UCB1T regret,meta RS regret,meta RS OPT regret"
+    np.savetxt(file_name, file_data.transpose(), delimiter=",", header=accuracy_header+regret_header)
 
 
 simulation_num = 1000
-job_num = 10
+job_num = 1
 simulation_num_per_job = int(simulation_num / job_num)
 step_num = 100000
 k = 20
-is_unsteady = 1
+is_nonsteady = 1
 is_constant = 0
-labels = ["UCB1T", "RS", "meta_UCB1T", "meta_RS", "RS_γ"]
-# labels = ["1", "2"]
+labels = ["UCB1T", "RS", "RS OPT", "RS gamma", "RS OPT gamma", "meta UCB1T", "meta RS", "meta RS OPT"]
+y_label = ["accuracy", "regret"]
 graph_titles = ["accuracy3", "regret3"]
-file_name = "unsteady.csv"
+file_name = "steady.csv"
+file_name = "nonsteady_constant.csv"
+file_name = "nonsteady.csv"
 
+print(file_name)
 start = time()
 
-data = Parallel(n_jobs=job_num)([delayed(simulation_parallel)(simulation_num_per_job, step_num, k, len(labels), is_unsteady, is_constant) for i in range(job_num)])
+data = Parallel(n_jobs=job_num)([delayed(simulation_parallel)(simulation_num_per_job, step_num, k, len(labels), is_nonsteady, is_constant) for i in range(job_num)])
 plot_graph(data, len(labels), len(graph_titles), step_num, job_num)
 
 print('{}秒かかりました'.format(time() - start))

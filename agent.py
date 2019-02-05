@@ -1,4 +1,5 @@
 import numpy as np
+import copy as cp
 import math
 import random
 
@@ -13,6 +14,7 @@ class Agent():
         self.arm_counts = np.zeros(k)
         self.arm_rewards = np.zeros(k)
         self.arm_values = np.zeros(k)
+        self.opt_r = 0
 
     def recet_params(self):
         self.value = np.zeros_like(self.value)
@@ -25,17 +27,17 @@ class Agent():
 
 
 class PS(Agent):
-    def __init__(self, bandit, k):
+    def __init__(self, k):
         super().__init__(k)
         self.k = k
-        sorted_index = np.argsort(bandit.probability)[::-1]
-        self.r = (bandit.probability[sorted_index[0]] + bandit.probability[sorted_index[1]]) / 2
+        # sorted_index = np.argsort(bandit.probability)[::-1]
+        # self.r = (bandit.probability[sorted_index[0]] + bandit.probability[sorted_index[1]]) / 2
 
     def reset_params(self):
         super().recet_params()
 
     def select_arm(self):
-        if np.max(self.arm_values) > self.r:
+        if np.max(self.arm_values) > self.opt_r:
             return greedy(self.arm_values)
         else:
             return random.randint(self.k)
@@ -47,10 +49,10 @@ class PS(Agent):
 
 
 class RS_OPT(Agent):
-    def __init__(self, bandit, k):
+    def __init__(self, k):
         super().__init__(k)
-        sorted_prob = np.sort(bandit.probability)[::-1]
-        self.r = (sorted_prob[0] + sorted_prob[1]) / 2
+        self.reward_sum = 0
+        self.count = 0
 
     def reset_params(self):
         super().recet_params()
@@ -59,10 +61,12 @@ class RS_OPT(Agent):
         return greedy(self.arm_values)
 
     def update(self, selected, reward):
+        self.count += 1
+        self.reward_sum += reward
         self.arm_counts[selected] += 1
         self.arm_rewards[selected] += reward
         average = self.arm_rewards[selected] / self.arm_counts[selected]
-        self.arm_values[selected] = self.arm_counts[selected] * (average - self.r)
+        self.arm_values[selected] = self.arm_counts[selected] * (average - self.opt_r)
 
 
 class RS(Agent):
@@ -87,6 +91,7 @@ class RS(Agent):
         average = self.arm_rewards[selected] / self.arm_counts[selected]
         self.arm_values[selected] = self.arm_counts[selected] * (average - self.r)
         self.r += self.alpha * (average - self.r)
+
 
 class RS_gamma(Agent):
     def __init__(self, k, alpha=0.0005, gamma=0.999):
@@ -115,6 +120,31 @@ class RS_gamma(Agent):
         self.arm_l_counts[selected] += 1 - reward
         self.r += self.alpha * (self.E[selected] - self.r)
 
+
+class RS_OPT_gamma(Agent):
+    def __init__(self, k, alpha=0.0005, gamma=0.999):
+        super().__init__(k)
+        self.alpha = alpha
+        self.reward_sum = 0
+        self.count = 0
+        self.gamma = gamma
+        self.E = np.zeros(k)
+        self.arm_w_counts = np.zeros(k) + 0.0001
+        self.arm_l_counts = np.zeros(k) + 0.0001
+
+    def reset_params(self):
+        super().recet_params()
+
+    def select_arm(self):
+        self.E = self.arm_w_counts / (self.arm_w_counts + self.arm_l_counts)
+        self.arm_values = (self.arm_w_counts + self.arm_l_counts) * (self.E - self.opt_r)
+        return greedy(self.arm_values)
+
+    def update(self, selected, reward):
+        self.arm_w_counts *= self.gamma
+        self.arm_l_counts *= self.gamma
+        self.arm_w_counts[selected] += reward
+        self.arm_l_counts[selected] += 1 - reward
 
 
 class RS_CH(Agent):
@@ -304,6 +334,79 @@ class UCB1T(Agent):
                 v = variance + math.sqrt((2.0 * math.log(self.count)) / self.arm_counts[i])
                 self.arm_values[i] = ave + math.sqrt((math.log(self.count) / self.arm_counts[i]) * min(0.25, v))
 
+
+class meta_bandit(Agent):
+    def __init__(self, k, agent, higher_agent, l=500, delta=0, lmd=30):
+        super().__init__(k)
+        self.original_agent = agent
+        self.original_higher_agent = higher_agent
+        self.old_agent = cp.deepcopy(self.original_agent)
+        self.new_agent = cp.deepcopy(self.original_agent)
+        self.higher_agent = cp.deepcopy(self.original_higher_agent)
+        self.meta_flag = 0
+        self.l = l
+        self.l_count = 0
+        self.delta = delta
+        self.lmd = lmd
+        self.step = 0
+        self.selected = 0
+        self.k = k
+        self.mT_sum = 0
+        self.MT = 0
+
+    def reset_params(self):
+        self.meta_flag = 0
+        self.l_count = 0
+        self.mT_sum = 0
+        self.MT = 0
+
+    def select_arm(self):
+        self.old_agent.opt_r = self.opt_r
+        self.new_agent.opt_r = self.opt_r
+        self.higher_agent.opt_r = self.opt_r
+
+        if self.meta_flag:
+            self.selected = self.higher_agent.select_arm()
+
+            if self.selected == 0:
+                return self.old_agent.select_arm()
+            else:
+                return self.new_agent.select_arm()
+        else:
+            return self.old_agent.select_arm()
+
+    def update(self, selected, reward):
+        self.step += 1
+
+        if self.meta_flag:
+            self.l_count += 1
+            self.higher_agent.update(self.selected, reward)
+            self.old_agent.update(selected, reward)
+            self.new_agent.update(selected, reward)
+
+            if self.l_count == self.l:
+                self.reset_params()
+
+                if greedy(self.higher_agent.arm_rewards) == 1:
+                    self.old_agent = self.new_agent
+
+        else:
+            self.old_agent.update(selected, reward)
+            # max_arm = greedy(self.old_agent.arm_rewards)
+            # rt_mean =  self.old_agent.arm_rewards[max_arm] /  self.old_agent.arm_counts[max_arm]
+            rt_mean = self.old_agent.reward_sum / self.old_agent.count
+            mT = reward - rt_mean + self.delta
+            self.mT_sum += mT
+            if self.mT_sum > self.MT:
+                self.MT = self.mT_sum
+            PHT = self.MT - self.mT_sum
+
+            if PHT > self.lmd:
+            # if self.step % 10000 == 0:
+            #     print(self.step)
+                self.meta_flag = 1
+                self.new_agent = cp.deepcopy(self.original_agent)
+                self.higher_agent = cp.deepcopy(self.original_higher_agent)
 
 class meta_UCB1T(Agent):
     def __init__(self, k, l=500, delta=0, lmd=30):

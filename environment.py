@@ -10,6 +10,8 @@ class Bandit(object):
 
         self.correct_arm = np.argmax(self.probability)
         self.max_prob_arm = np.amax(self.probability)
+        sorted_prob = np.sort(self.probability)[::-1]
+        self.opt_r = (sorted_prob[0] + sorted_prob[1]) / 2
 
     #         print(self.probability)
 

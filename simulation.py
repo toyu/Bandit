@@ -12,26 +12,31 @@ def simulation(simulation_num, step_num, k, agent_num, is_unsteady, is_constant)
     for sim in range(simulation_num):
         print(sim + 1)
         bandit = en.Bandit(k)
-        agent_list = [ag.meta_RS(k)]
-        for i, agent in enumerate(agent_list):
+        agent_list = [ag.UCB1T(k), ag.RS(k), ag.meta_UCB1T(k), ag.meta_RS(k), ag.RS_gamma(k)]
+        regret_sums = np.zeros(agent_num)
+        prev_selecteds = np.zeros(agent_num)
+        for step in range(step_num):
             prev_selected = 0
             regret = 0
-            for step in range(step_num):
-                # バンディット変化
-                if is_unsteady:
-                    if is_constant:
-                        if step % 10000 == 0:
-                            bandit = en.Bandit(k)
-                    else:
-                        if np.random.rand() < 0.0001:
-                            bandit = en.Bandit(k)
+
+            # バンディット変化
+            if is_unsteady:
+                if is_constant:
+                    if step % 10000 == 0:
+                        bandit = en.Bandit(k)
+                else:
+                    if np.random.rand() < 0.0001:
+                        bandit = en.Bandit(k)
+
+            for i, agent in enumerate(agent_list):
                 # 腕の選択
                 selected = agent.select_arm()
-                if selected == prev_selected:
-                    replacement = 0
-                else:
-                    replacement = 1
-                prev_selected = selected
+                # 前と同じ行動か?
+                # if selected == int(prev_selected[i]):
+                #     replacement = 0
+                # else:
+                #     replacement = 1
+                #     prev_selecteds[i] = selected
                 # 報酬の観測
                 reward = bandit.get_reward(int(selected))
                 # 価値の更新
@@ -39,10 +44,10 @@ def simulation(simulation_num, step_num, k, agent_num, is_unsteady, is_constant)
                 # accuracy
                 accuracy[i][step] += bandit.get_correct(selected)
                 # regret
-                regret += bandit.get_regret(selected)
-                regrets[i][step] += regret
+                regret_sums[i] += bandit.get_regret(selected)
+                regrets[i][step] += regret_sums[i]
                 # replacement
-                replacements[i][step] += replacement
+                # replacements[i][step] += replacement
 
     accuracy /= simulation_num
     regrets /= simulation_num
@@ -81,22 +86,3 @@ def simulation(simulation_num, step_num, k, agent_num, is_unsteady, is_constant)
 
 
 simulation(300, 100000, 20, 1, 1, 1)
-
-from joblib import Parallel, delayed
-from time import time
-
-# simulation_num = 1000
-# job_num = 10
-# simulation_num_per_job = int(simulation_num / job_num)
-# episode_num = 1200
-# agent_num = 2
-# data_type_num = 1
-# labels = ["RS_GRC", "QL(e_greedy)"]
-# graph_titles = ["reward"]
-#
-# start = time()
-#
-# data = Parallel(n_jobs=job_num, verbose=10)([delayed(simulation)(simulation_num_per_job, episode_num, agent_num) for i in range(job_num)])
-# plot_graph(data, agent_num, data_type_num, episode_num, job_num)
-#
-# print('{}秒かかりました'.format(time() - start))
