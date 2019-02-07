@@ -15,13 +15,20 @@ def simulation_parallel(simulation_num, step_num, k, agent_num, is_nonsteady, is
         bandit = en.Bandit(k)
         # agent_list = [ag.UCB1T(k), ag.RS(k), ag.meta_UCB1T(k), ag.meta_RS(k), ag.RS_gamma(k)]
         agent_list = [ag.UCB1T(k),
-                      ag.RS(k),
+                      ag.TS(k),
+                      ag.RS_gamma(k, gamma=1.0),
                       ag.RS_OPT(k),
+                      ag.TS_gamma(k),
                       ag.RS_gamma(k),
                       ag.RS_OPT_gamma(k),
                       ag.meta_bandit(k, agent=ag.UCB1T(k), higher_agent=ag.UCB1T(2), l=500, delta=0, lmd=30),
-                      ag.meta_bandit(k, agent=ag.RS(k), higher_agent=ag.RS(2), l=30, delta=0, lmd=30),
-                      ag.meta_bandit(k, agent=ag.RS_OPT(k), higher_agent=ag.RS_OPT(2), l=25, delta=0, lmd=30)]
+                      ag.meta_bandit(k, agent=ag.TS(k), higher_agent=ag.TS(2), l=30, delta=0, lmd=30),
+                      ag.meta_bandit(k, agent=ag.RS_gamma(k, gamma=1.0), higher_agent=ag.RS_gamma(2, gamma=1.0), l=30, delta=0, lmd=30),
+                      ag.meta_bandit(k, agent=ag.RS_OPT(k), higher_agent=ag.RS_OPT(2), l=30, delta=0, lmd=30)]
+        # agent_list = [ag.meta_bandit(k, agent=ag.RS_gamma(k, gamma=1.0), higher_agent=ag.RS_gamma(2, gamma=1.0), l=30, delta=0, lmd=30),
+        #               ag.meta_bandit(k, agent=ag.TS(k), higher_agent=ag.TS(2), l=30, delta=0, lmd=30)]
+        agent_list = [ag.RS_gamma(k),
+                      ag.RS_OPT_gamma(k)]
 
         for agent in agent_list:
             agent.opt_r = bandit.opt_r
@@ -88,36 +95,44 @@ def plot_graph(data, agent_num, data_type_num, step_num, job_num):
         else:
             file_data = np.concatenate([file_data, graphs], 0)
 
-        plt.xlabel('step')
-        plt.ylabel(y_label[i])
-        # plt.ylim([0.0, 1.1])
+        colors = ["g", "b", "r", "m", "c", "#ff7f00", "#a65628", "g", "b", "r", "m"]
+        markers = ["o", "s", "^", "v", "<", ">", "p", "D", "x", "1", "2"]
+        line_styles = ["dashed", "dashed", "dashed", "dashed", "dashed", "dashed", "dashed", "solid", "solid", "solid", "solid"]
+
+
+        plt.figure(figsize=(8, 5), dpi=100)
+        if i == 1:
+            plt.ylim([0, 3000])
         # plt.xscale("log")
+        plt.xlabel('step', fontsize=12)
+        plt.ylabel(y_label[i], fontsize=12)
         for l in range(len(graphs)):
-            plt.plot(graphs[l], label=labels[l], alpha=0.8, linewidth=0.8)
-        plt.legend(loc="best")
+            plt.plot(graphs[l], alpha=0.8, linewidth=1.2, label=" ", color=colors[l], linestyle=line_styles[l], marker=markers[l], markevery=4999)
+        plt.legend(loc="best", frameon=False)
         plt.savefig(graph_titles[i])
         plt.clf()
         # plt.show()
 
-    header = "UCB1T_accuracy,RS_accuracymeta_UCB1T_accuracy,meta_RS_accuracy,RS_γ_accuracy,UCB1T_regret,RS_regret,meta_UCB1T_regret,meta_RS_regret,RS_γ_regret"
-    accuracy_header = "UCB1T accuracy,RS accuracy,RS OPT accuracy,RS gamma accuracy,RS OPT gamma accuracy,meta UCB1T accuracy,meta RS accuracy,meta RS OPT accuracy"
-    regret_header = ",UCB1T regret,RS regret,RS OPT regret,RS gamma regret,RS OPT gamma regret,meta UCB1T regret,meta RS regret,meta RS OPT regret"
+    accuracy_header = "UCB1T accuracy,TS accuracy,RS accuracy,RS OPT accuracy,TS gamma accuracy,RS gamma accuracy,RS OPT gamma accuracy,meta UCB1T accuracy,meta TS accuracy,meta RS accuracy,meta RS OPT accuracy"
+    regret_header = ",UCB1T regret,TS regret,RS regret,RS OPT regret,TS gamma regret,RS gamma regret,RS OPT gamma regret,meta UCB1T regret,meta TS regret,meta RS regret,meta RS OPT regret"
     np.savetxt(file_name, file_data.transpose(), delimiter=",", header=accuracy_header+regret_header)
 
 
-simulation_num = 1000
-job_num = 1
+simulation_num = 300
+job_num = 3
 simulation_num_per_job = int(simulation_num / job_num)
 step_num = 100000
 k = 20
 is_nonsteady = 1
 is_constant = 0
-labels = ["UCB1T", "RS", "RS OPT", "RS gamma", "RS OPT gamma", "meta UCB1T", "meta RS", "meta RS OPT"]
+agent_num = 11
+labels = ["UCB1T", "TS", "RS", "RS OPT", "TS gamma", "RS gamma", "RS OPT gamma", "meta UCB1T", "meta TS", "meta RS", "meta RS OPT"]
 y_label = ["accuracy", "regret"]
-graph_titles = ["accuracy3", "regret3"]
+graph_titles = ["accuracy", "regret"]
 file_name = "steady.csv"
-file_name = "nonsteady_constant.csv"
 file_name = "nonsteady.csv"
+# file_name = "non-steady_constant.csv"
+file_name = "test.csv"
 
 print(file_name)
 start = time()

@@ -94,7 +94,7 @@ class RS(Agent):
 
 
 class RS_gamma(Agent):
-    def __init__(self, k, alpha=0.0005, gamma=0.999):
+    def __init__(self, k, alpha=0.001, gamma=0.999):
         super().__init__(k)
         self.r = 1.0
         self.alpha = alpha
@@ -114,6 +114,8 @@ class RS_gamma(Agent):
         return greedy(self.arm_values)
 
     def update(self, selected, reward):
+        self.count += 1
+        self.reward_sum += reward
         self.arm_w_counts *= self.gamma
         self.arm_l_counts *= self.gamma
         self.arm_w_counts[selected] += reward
@@ -121,12 +123,39 @@ class RS_gamma(Agent):
         self.r += self.alpha * (self.E[selected] - self.r)
 
 
+# class RS_gamma(Agent):
+#     def __init__(self, k, alpha=0.001, gamma=0.999):
+#         super().__init__(k)
+#         self.r = 1.0
+#         self.alpha = alpha
+#         self.reward_sum = 0
+#         self.count = 0
+#         self.gamma = gamma
+#         self.E = np.zeros(k)
+#         self.arm_w_counts = np.zeros(k) + 0.0001
+#         self.arm_l_counts = np.zeros(k) + 0.0001
+#
+#     def reset_params(self):
+#         super().recet_params()
+#
+#     def select_arm(self):
+#         self.E = self.arm_w_counts / (self.arm_w_counts + self.arm_l_counts)
+#         self.arm_values = (self.arm_w_counts + self.arm_l_counts) * (self.E - np.amax(np.amax(self.E), self.r))
+#         return greedy(self.arm_values)
+#
+#     def update(self, selected, reward):
+#         self.count += 1
+#         self.reward_sum += reward
+#         self.arm_w_counts *= self.gamma
+#         self.arm_l_counts *= self.gamma
+#         self.arm_w_counts[selected] += reward
+#         self.arm_l_counts[selected] += 1 - reward
+#         self.r += self.alpha * (self.E[selected] - self.r)
+
+
 class RS_OPT_gamma(Agent):
-    def __init__(self, k, alpha=0.0005, gamma=0.999):
+    def __init__(self, k, gamma=0.999):
         super().__init__(k)
-        self.alpha = alpha
-        self.reward_sum = 0
-        self.count = 0
         self.gamma = gamma
         self.E = np.zeros(k)
         self.arm_w_counts = np.zeros(k) + 0.0001
@@ -286,6 +315,12 @@ class TS(Agent):
     def __init__(self, k):
         super().__init__(k)
         self.sampling = np.ones((k, 2))
+        self.alpha = 1
+        self.beta = 1
+        self.reward_sum = 0
+        self.count = 0
+        self.arm_w_counts = np.zeros(k)
+        self.arm_l_counts = np.zeros(k)
 
     def recet_params(self):
         super().recet_params()
@@ -294,10 +329,38 @@ class TS(Agent):
         return np.argmax([np.random.beta(n[0], n[1], 1) for n in self.sampling])
 
     def update(self, selected, reward):
-        self.arm_counts[selected] += 1
+        self.count += 1
+        self.reward_sum += reward
+        self.arm_w_counts[selected] += reward
+        self.arm_l_counts[selected] += 1 - reward
+        self.sampling[selected] = (self.arm_w_counts[selected]+self.alpha, self.arm_l_counts[selected]+self.beta)
+
+
+class TS_gamma(Agent):
+    def __init__(self, k, gamma=0.999):
+        super().__init__(k)
+        self.sampling = np.ones((k, 2))
+        self.gamma = gamma
+        self.alpha = 1
+        self.beta = 1
+        self.reward_sum = 0
+        self.count = 0
+        self.arm_w_counts = np.zeros(k)
+        self.arm_l_counts = np.zeros(k)
+
+    def recet_params(self):
+        super().recet_params()
+
+    def select_arm(self):
+        return np.argmax([np.random.beta(n[0], n[1], 1) for n in self.sampling])
+
+    def update(self, selected, reward):
+        self.arm_w_counts *= self.gamma
+        self.arm_l_counts *= self.gamma
+        self.arm_w_counts[selected] += reward
+        self.arm_l_counts[selected] += 1 - reward
         self.arm_rewards[selected] += reward
-        self.sampling[selected] = (self.arm_rewards[selected]+1,\
-                                   self.arm_counts[selected]-self.arm_rewards[selected]+1)
+        self.sampling[selected] = (self.arm_w_counts[selected]+self.alpha, self.arm_l_counts[selected]+self.beta)
 
 
 class UCB1T(Agent):
