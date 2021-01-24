@@ -3,12 +3,16 @@ import matplotlib.pyplot as plt
 import environment as en
 import agent as ag
 
-
+# シミュレーション
 def simulation(simulation_num, step_num, k, agent_num, is_unsteady, is_constant):
     labels = ["meta_UCB1T"]
+    # 記録用の配列を用意
     accuracy = np.zeros((agent_num, step_num))
     regrets = np.zeros((agent_num, step_num))
+    # 前回選択した腕と今回選択した腕が違うか判定
     replacements = np.zeros((agent_num, step_num))
+    
+    # シミュレーション
     for sim in range(simulation_num):
         print(sim + 1)
         bandit = en.Bandit(k)
@@ -32,11 +36,11 @@ def simulation(simulation_num, step_num, k, agent_num, is_unsteady, is_constant)
                 # 腕の選択
                 selected = agent.select_arm()
                 # 前と同じ行動か?
-                # if selected == int(prev_selected[i]):
-                #     replacement = 0
-                # else:
-                #     replacement = 1
-                #     prev_selecteds[i] = selected
+                if selected == int(prev_selected[i]):
+                    replacement = 0
+                else:
+                    replacement = 1
+                    prev_selecteds[i] = selected
                 # 報酬の観測
                 reward = bandit.get_reward(int(selected))
                 # 価値の更新
@@ -49,10 +53,12 @@ def simulation(simulation_num, step_num, k, agent_num, is_unsteady, is_constant)
                 # replacement
                 # replacements[i][step] += replacement
 
+    # それぞれの指標のシミュレーションごとの平均を算出
     accuracy /= simulation_num
     regrets /= simulation_num
     replacements /= simulation_num
 
+    # プロット
     plt.xlabel('steps')
     plt.ylabel('accuracy')
     # plt.xscale("log")
